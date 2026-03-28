@@ -1,14 +1,16 @@
 package main
 
 import (
+	"AdvancedProgramming2/db"
 	"AdvancedProgramming2/http"
 
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
-	r := gin.Default()
 
+	db.DBInit()
+	r := gin.Default()
 	//order
 	order := r.Group("/order")
 
