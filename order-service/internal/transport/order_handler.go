@@ -5,6 +5,9 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/gin-gonic/gin"
@@ -98,5 +101,46 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 	default:
 		c.JSON(http.StatusOK, order)
+	}
+}
+
+func (h *OrderHandler) GetList(c *gin.Context) {
+	rawQuery := strings.ReplaceAll(c.Request.URL.RawQuery, "?", "&")
+	values, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid query string"})
+		return
+	}
+
+	minAmountRaw := values.Get("min_amount")
+	maxAmountRaw := values.Get("max_amount")
+
+	if minAmountRaw == "" || maxAmountRaw == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "min_amount and max_amount are required"})
+		return
+	}
+
+	minAmount, err := strconv.ParseInt(minAmountRaw, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "min_amount must be an integer"})
+		return
+	}
+
+	maxAmount, err := strconv.ParseInt(maxAmountRaw, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "max_amount must be an integer"})
+		return
+	}
+
+	orders, err := h.uc.OrderList(context.Background(), minAmount, maxAmount)
+	switch {
+	case errors.Is(err, usecase.ErrInvalidAmountRange):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	case errors.Is(err, usecase.ErrNotFound):
+		c.JSON(http.StatusBadRequest, gin.H{"error": "orders not found"})
+	case err != nil:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+	default:
+		c.JSON(http.StatusOK, orders)
 	}
 }

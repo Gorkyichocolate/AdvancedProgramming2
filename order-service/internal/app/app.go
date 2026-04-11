@@ -29,6 +29,7 @@ func New(db *pgxpool.Pool, paymentServiceURL string) *App {
 		orders.POST("/", handler.CreateOrder)
 		orders.GET("/:id", handler.GetOrder)
 		orders.PATCH("/:id/cancel", handler.CancelOrder)
+		orders.GET("/", handler.GetList)
 	}
 
 	return &App{router: r}

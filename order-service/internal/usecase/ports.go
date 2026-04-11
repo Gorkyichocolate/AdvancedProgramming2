@@ -9,6 +9,7 @@ type OrderRepository interface {
 	Create(ctx context.Context, o *domain.Order) error
 	GetByID(ctx context.Context, id string) (*domain.Order, error)
 	UpdateStatus(ctx context.Context, id, status string) error
+	OrderList(ctx context.Context, minAmount, maxAmount int64) ([]domain.Order, error)
 }
 
 type PaymentResult struct {

@@ -11,6 +11,7 @@ import (
 
 var (
 	ErrInvalidAmount             = errors.New("amount must be greater than zero")
+	ErrInvalidAmountRange        = errors.New("min_amount and max_amount must be in range [1000, 50000] and min_amount <= max_amount")
 	ErrNotFound                  = errors.New("order not found")
 	ErrNotCancellable            = errors.New("only Pending orders can be cancelled")
 	ErrPaymentServiceUnavailable = errors.New("payment service unavailable")
@@ -89,6 +90,23 @@ func (u *OrderUsecase) CancelOrder(ctx context.Context, id string) (*domain.Orde
 	}
 	order.Status = domain.StatusCancelled
 	return order, nil
+}
+
+func (u *OrderUsecase) OrderList(ctx context.Context, minAmount, maxAmount int64) ([]domain.Order, error) {
+	if minAmount < 1 || maxAmount > 100000000 || minAmount > maxAmount {
+		return nil, ErrInvalidAmountRange
+	}
+
+	orders, err := u.repo.OrderList(ctx, minAmount, maxAmount)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(orders) == 0 {
+		return nil, ErrNotFound
+	}
+
+	return orders, nil
 }
 
 func newUUID() string {

@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
+	if err := godotenv.Load(".env"); err != nil {
 		log.Println("no .env file, reading from environment")
 	}
 
@@ -33,7 +33,7 @@ func main() {
 
 	addr := os.Getenv("PAYMENT_ADDR")
 	if addr == "" {
-		addr = ":8081"
+		addr = ":8086"
 	}
 
 	if err := app.New(db).Run(addr); err != nil {

@@ -1,4 +1,4 @@
-module AdvancedProgramming2
+module github.com/Gorkyichocolate/AdvancedProgramming2
 
 go 1.25.7
 
