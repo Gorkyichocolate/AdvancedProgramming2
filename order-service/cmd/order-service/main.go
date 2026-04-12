@@ -1,8 +1,8 @@
 package main
 
 import (
-	"AdvancedProgramming2/order-service/internal/app"
 	"context"
+	"github.com/Gorkyichocolate/AdvancedProgramming2/order-service/internal/app"
 	"log"
 	"os"
 
@@ -31,9 +31,9 @@ func main() {
 	}
 	log.Println("order-service: connected to DB")
 
-	paymentServiceURL := os.Getenv("PAYMENT_SERVICE_URL")
-	if paymentServiceURL == "" {
-		paymentServiceURL = "http://localhost:8081/payments/"
+	paymentGRPCAddr := os.Getenv("PAYMENT_GRPC_ADDR")
+	if paymentGRPCAddr == "" {
+		paymentGRPCAddr = "localhost:8088"
 	}
 
 	addr := os.Getenv("ORDER_ADDR")
@@ -41,7 +41,20 @@ func main() {
 		addr = ":8086"
 	}
 
-	if err := app.New(db, paymentServiceURL).Run(addr); err != nil {
+	orderGRPCAddr := os.Getenv("ORDER_GRPC_ADDR")
+	if orderGRPCAddr == "" {
+		orderGRPCAddr = ":8085"
+	}
+
+	app, err := app.New(db, paymentGRPCAddr)
+	if err != nil {
+		log.Fatalf("cannot create order app: %v", err)
+	}
+	defer func() {
+		_ = app.Close()
+	}()
+
+	if err := app.Run(addr, orderGRPCAddr); err != nil {
 		log.Fatalf("order-service exited: %v", err)
 	}
 }

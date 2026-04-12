@@ -1,8 +1,8 @@
 package usecase
 
 import (
-	"AdvancedProgramming2/order-service/internal/domain"
 	"context"
+	"github.com/Gorkyichocolate/AdvancedProgramming2/order-service/internal/domain"
 )
 
 type OrderRepository interface {

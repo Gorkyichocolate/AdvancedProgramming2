@@ -1,9 +1,9 @@
 package transport
 
 import (
-	"AdvancedProgramming2/payment-service/internal/usecase"
 	"context"
 	"errors"
+	"github.com/Gorkyichocolate/AdvancedProgramming2/payment-service/internal/usecase"
 	"net/http"
 
 	"github.com/gin-gonic/gin"

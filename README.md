@@ -4,7 +4,9 @@ Two-service Go microservice system with clear domain boundaries:
 - `order-service` owns order lifecycle.
 - `payment-service` owns payment authorization outcome.
 
-Both services use PostgreSQL and communicate over HTTP.
+External client traffic to `order-service` still uses REST, while internal communication from `order-service` to `payment-service` now uses gRPC.
+
+This project uses a contract-first workflow with a separate protobuf repository (`github.com/Gorkyichocolate/Proto`) and a generated-code module (`github.com/Gorkyichocolate/ap2-generated`).
 
 ## Why This Architecture
 
@@ -22,10 +24,10 @@ Decision rationale:
 - keeps infra decisions (DB/HTTP client) at application edge
 
 ### 2) Synchronous Inter-Service Call (Order -> Payment)
-`order-service` creates an order first, then calls `payment-service` synchronously.
+`order-service` creates an order first, then calls `payment-service` synchronously using gRPC.
 
 Decision rationale:
-- simple request/response model
+- strict contract enforcement through Protocol Buffers
 - immediate feedback to the caller about payment status
 - lower complexity compared to async broker-based flows
 
@@ -127,17 +129,20 @@ Environment variables:
 - `ORDER_DB_URL` (required)
 - `PAYMENT_DB_URL` (required)
 - `ORDER_ADDR` (default `:8086`)
-- `PAYMENT_ADDR` (default currently `:8086` in code)
-- `PAYMENT_SERVICE_URL` for order-service (default `http://localhost:8081/payments/`)
+- `ORDER_GRPC_ADDR` (default `:8085`)
+- `PAYMENT_ADDR` (default `:8087`)
+- `PAYMENT_GRPC_ADDR` (default `:8088`)
 
 Important operational note:
-- default `ORDER_ADDR` and `PAYMENT_ADDR` are the same (`:8086`) in current code, which causes port conflict if both start with defaults
-- default `PAYMENT_SERVICE_URL` points to `:8081`, so set it explicitly to your actual `payment-service` address
+- `order-service` exposes REST on `ORDER_ADDR` and gRPC on `ORDER_GRPC_ADDR`
+- `payment-service` exposes REST on `PAYMENT_ADDR` and gRPC on `PAYMENT_GRPC_ADDR`
+- internal order-to-payment communication now uses `PAYMENT_GRPC_ADDR`
 
 Recommended local setup:
-- `PAYMENT_ADDR=:8081`
+- `PAYMENT_ADDR=:8087`
+- `PAYMENT_GRPC_ADDR=:8088`
 - `ORDER_ADDR=:8086`
-- `PAYMENT_SERVICE_URL=http://localhost:8081/payments/`
+- `ORDER_GRPC_ADDR=:8085`
 
 ## Database Migrations
 
@@ -152,13 +157,15 @@ From repository root:
 ```bash
 # Terminal 1: payment-service
 export PAYMENT_DB_URL='postgres://user:pass@localhost:5432/payments_db?sslmode=disable'
-export PAYMENT_ADDR=':8081'
+export PAYMENT_ADDR=':8087'
+export PAYMENT_GRPC_ADDR=':8088'
 go run ./payment-service/cmd/payment-service
 
 # Terminal 2: order-service
 export ORDER_DB_URL='postgres://user:pass@localhost:5432/orders_db?sslmode=disable'
 export ORDER_ADDR=':8086'
-export PAYMENT_SERVICE_URL='http://localhost:8081/payments/'
+export ORDER_GRPC_ADDR=':8085'
+export PAYMENT_GRPC_ADDR='localhost:8088'
 go run ./order-service/cmd/order-service
 ```
 

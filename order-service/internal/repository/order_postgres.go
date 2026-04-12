@@ -1,8 +1,8 @@
 package repository
 
 import (
-	"AdvancedProgramming2/order-service/internal/domain"
 	"context"
+	"github.com/Gorkyichocolate/AdvancedProgramming2/order-service/internal/domain"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"

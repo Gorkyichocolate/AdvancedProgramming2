@@ -1,9 +1,9 @@
 package transport
 
 import (
-	"AdvancedProgramming2/order-service/internal/usecase"
 	"context"
 	"errors"
+	"github.com/Gorkyichocolate/AdvancedProgramming2/order-service/internal/usecase"
 	"net/http"
 	"net/url"
 	"strconv"

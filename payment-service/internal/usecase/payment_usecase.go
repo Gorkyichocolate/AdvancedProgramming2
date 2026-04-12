@@ -1,11 +1,11 @@
 package usecase
 
 import (
-	"AdvancedProgramming2/payment-service/internal/domain"
 	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"github.com/Gorkyichocolate/AdvancedProgramming2/payment-service/internal/domain"
 )
 
 var ErrNotFound = errors.New("payment not found")

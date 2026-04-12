@@ -1,11 +1,11 @@
 package usecase
 
 import (
-	"AdvancedProgramming2/order-service/internal/domain"
 	"context"
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"github.com/Gorkyichocolate/AdvancedProgramming2/order-service/internal/domain"
 	"time"
 )
 
@@ -20,10 +20,11 @@ var (
 type OrderUsecase struct {
 	repo          OrderRepository
 	paymentClient PaymentClient
+	broadcaster   *OrderStatusBroadcaster
 }
 
-func NewOrderUsecase(repo OrderRepository, paymentClient PaymentClient) *OrderUsecase {
-	return &OrderUsecase{repo: repo, paymentClient: paymentClient}
+func NewOrderUsecase(repo OrderRepository, paymentClient PaymentClient, broadcaster *OrderStatusBroadcaster) *OrderUsecase {
+	return &OrderUsecase{repo: repo, paymentClient: paymentClient, broadcaster: broadcaster}
 }
 
 func (u *OrderUsecase) CreateOrder(ctx context.Context, customerID, itemName string, amount int64) (*domain.Order, error) {
@@ -43,11 +44,15 @@ func (u *OrderUsecase) CreateOrder(ctx context.Context, customerID, itemName str
 	if err := u.repo.Create(ctx, order); err != nil {
 		return nil, err
 	}
+	u.publishOrder(order)
 
 	result, err := u.paymentClient.Pay(ctx, order.ID, order.Amount)
 	if err != nil {
-		_ = u.repo.UpdateStatus(ctx, order.ID, domain.StatusFailed)
+		if updateErr := u.repo.UpdateStatus(ctx, order.ID, domain.StatusFailed); updateErr != nil {
+			return nil, updateErr
+		}
 		order.Status = domain.StatusFailed
+		u.publishOrder(order)
 		return order, ErrPaymentServiceUnavailable
 	}
 
@@ -60,6 +65,7 @@ func (u *OrderUsecase) CreateOrder(ctx context.Context, customerID, itemName str
 		return nil, err
 	}
 	order.Status = newStatus
+	u.publishOrder(order)
 	return order, nil
 }
 
@@ -89,7 +95,38 @@ func (u *OrderUsecase) CancelOrder(ctx context.Context, id string) (*domain.Orde
 		return nil, err
 	}
 	order.Status = domain.StatusCancelled
+	u.publishOrder(order)
 	return order, nil
+}
+
+func (u *OrderUsecase) SubscribeOrderUpdates(ctx context.Context, orderID string) (<-chan *domain.Order, func()) {
+	updates, cancel := u.broadcaster.Subscribe(ctx)
+	filtered := make(chan *domain.Order, 16)
+
+	go func() {
+		defer close(filtered)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case order, ok := <-updates:
+				if !ok {
+					return
+				}
+				if order.ID == orderID {
+					filtered <- order
+				}
+			}
+		}
+	}()
+
+	return filtered, cancel
+}
+
+func (u *OrderUsecase) publishOrder(order *domain.Order) {
+	if u.broadcaster != nil {
+		u.broadcaster.Publish(order)
+	}
 }
 
 func (u *OrderUsecase) OrderList(ctx context.Context, minAmount, maxAmount int64) ([]domain.Order, error) {

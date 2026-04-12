@@ -1,8 +1,8 @@
 package main
 
 import (
-	"AdvancedProgramming2/payment-service/internal/app"
 	"context"
+	"github.com/Gorkyichocolate/AdvancedProgramming2/payment-service/internal/app"
 	"log"
 	"os"
 
@@ -33,10 +33,15 @@ func main() {
 
 	addr := os.Getenv("PAYMENT_ADDR")
 	if addr == "" {
-		addr = ":8086"
+		addr = ":8087"
 	}
 
-	if err := app.New(db).Run(addr); err != nil {
+	grpcAddr := os.Getenv("PAYMENT_GRPC_ADDR")
+	if grpcAddr == "" {
+		grpcAddr = ":8088"
+	}
+
+	if err := app.New(db).Run(addr, grpcAddr); err != nil {
 		log.Fatalf("payment-service exited: %v", err)
 	}
 }

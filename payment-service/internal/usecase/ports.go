@@ -1,8 +1,8 @@
 package usecase
 
 import (
-	"AdvancedProgramming2/payment-service/internal/domain"
 	"context"
+	"github.com/Gorkyichocolate/AdvancedProgramming2/payment-service/internal/domain"
 )
 
 type PaymentRepository interface {

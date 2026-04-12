@@ -1,11 +1,11 @@
 package transport
 
 import (
-	"AdvancedProgramming2/order-service/internal/usecase"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/Gorkyichocolate/AdvancedProgramming2/order-service/internal/usecase"
 	"net/http"
 )
 
