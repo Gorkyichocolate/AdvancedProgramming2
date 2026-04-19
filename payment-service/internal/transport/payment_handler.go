@@ -3,8 +3,9 @@ package transport
 import (
 	"context"
 	"errors"
-	"github.com/Gorkyichocolate/AdvancedProgramming2/payment-service/internal/usecase"
 	"net/http"
+
+	"github.com/Gorkyichocolate/AdvancedProgramming2/payment-service/internal/usecase"
 
 	"github.com/gin-gonic/gin"
 )

@@ -8,6 +8,15 @@ External client traffic to `order-service` still uses REST, while internal commu
 
 This project uses a contract-first workflow with a separate protobuf repository (`github.com/Gorkyichocolate/Proto`) and a generated-code module (`github.com/Gorkyichocolate/ap2-generated`).
 
+## 📚 Documentation
+
+- **[DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md)** — Complete documentation index with links and navigation
+- **[USAGE_GUIDE.md](USAGE_GUIDE.md)** — Complete guide on how to work with the microservices, API endpoints, and examples
+- **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** — Quick reference with commands and checklists
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** — System architecture diagrams (Mermaid)
+- **[DEMO_LIST_PAYMENTS.md](DEMO_LIST_PAYMENTS.md)** — ListPayments RPC implementation demo
+- **[IMPLEMENTATION_REPORT.md](IMPLEMENTATION_REPORT.md)** — ListPayments implementation report
+
 ## Why This Architecture
 
 ### 1) Layered / Hexagonal-ish Service Structure

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+
 	"github.com/Gorkyichocolate/AdvancedProgramming2/payment-service/internal/domain"
 )
 
@@ -47,6 +48,14 @@ func (u *PaymentUsecase) GetPayment(ctx context.Context, orderID string) (*domai
 		return nil, ErrNotFound
 	}
 	return p, nil
+}
+
+func (u *PaymentUsecase) ListPaymentsByStatus(ctx context.Context, status string) ([]domain.Payment, error) {
+	payments, err := u.repo.ListByStatus(ctx, status)
+	if err != nil {
+		return nil, err
+	}
+	return payments, nil
 }
 
 func newUUID() string {

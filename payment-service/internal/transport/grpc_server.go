@@ -36,3 +36,27 @@ func (s *PaymentGRPCServer) ProcessPayment(ctx context.Context, req *ap2v1.Payme
 		ProcessedAt:   timestamppb.Now(),
 	}, nil
 }
+
+func (s *PaymentGRPCServer) ListPayments(ctx context.Context, req *ap2v1.ListPaymentsRequest) (*ap2v1.ListPaymentsResponse, error) {
+	if req == nil || req.Status == "" {
+		return nil, status.Error(codes.InvalidArgument, "status is required")
+	}
+
+	payments, err := s.uc.ListPaymentsByStatus(ctx, req.Status)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "failed to list payments")
+	}
+
+	var pbPayments []*ap2v1.PaymentResponse
+	for _, p := range payments {
+		pbPayments = append(pbPayments, &ap2v1.PaymentResponse{
+			TransactionId: p.TransactionID,
+			Status:        p.Status,
+			ProcessedAt:   timestamppb.Now(),
+		})
+	}
+
+	return &ap2v1.ListPaymentsResponse{
+		Payments: pbPayments,
+	}, nil
+}
