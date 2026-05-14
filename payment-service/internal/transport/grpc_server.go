@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"log"
 
 	"github.com/Gorkyichocolate/AdvancedProgramming2/payment-service/internal/usecase"
 
@@ -27,7 +28,8 @@ func (s *PaymentGRPCServer) ProcessPayment(ctx context.Context, req *ap2v1.Payme
 
 	payment, err := s.uc.ProcessPayment(ctx, req.OrderId, req.Amount)
 	if err != nil {
-		return nil, status.Error(codes.Internal, "failed to process payment")
+		log.Println("ProcessPayment error:", err)
+		return nil, status.Error(codes.Internal, err.Error())
 	}
 
 	return &ap2v1.PaymentResponse{

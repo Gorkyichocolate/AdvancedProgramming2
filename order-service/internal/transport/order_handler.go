@@ -3,12 +3,15 @@ package transport
 import (
 	"context"
 	"errors"
-	"github.com/Gorkyichocolate/AdvancedProgramming2/order-service/internal/usecase"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/Gorkyichocolate/AdvancedProgramming2/order-service/internal/cache"
+	"github.com/Gorkyichocolate/AdvancedProgramming2/order-service/internal/usecase"
 
 	"github.com/gin-gonic/gin"
 )
@@ -20,11 +23,16 @@ type idempotencyEntry struct {
 
 type OrderHandler struct {
 	uc          *usecase.OrderUsecase
+	cache       *cache.OrderCache
 	idempotency sync.Map
 }
 
 func NewOrderHandler(uc *usecase.OrderUsecase) *OrderHandler {
 	return &OrderHandler{uc: uc}
+}
+
+func NewOrderHandlerWithCache(uc *usecase.OrderUsecase, orderCache *cache.OrderCache) *OrderHandler {
+	return &OrderHandler{uc: uc, cache: orderCache}
 }
 
 type createOrderRequest struct {
@@ -62,12 +70,24 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 	case errors.Is(err, usecase.ErrPaymentServiceUnavailable):
 		status = http.StatusServiceUnavailable
 		body = gin.H{"error": "payment service unavailable", "order": order}
+		// Cache the order even if payment service is unavailable
+		if h.cache != nil && order != nil {
+			if err := h.cache.Set(context.Background(), order.ID, order); err != nil {
+				log.Printf("failed to cache order: %v", err)
+			}
+		}
 	case err != nil:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	default:
 		status = http.StatusCreated
 		body = order
+		// Cache newly created orders
+		if h.cache != nil && order != nil {
+			if err := h.cache.Set(context.Background(), order.ID, order); err != nil {
+				log.Printf("failed to cache order: %v", err)
+			}
+		}
 	}
 
 	if key != "" {
@@ -78,20 +98,43 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 
 func (h *OrderHandler) GetOrder(c *gin.Context) {
 	id := c.Param("id")
-	order, err := h.uc.GetOrder(context.Background(), id)
+	ctx := context.Background()
+
+	// Cache-aside pattern: check cache first
+	if h.cache != nil {
+		var cachedOrder any
+		if err := h.cache.Get(ctx, id, &cachedOrder); err != nil {
+			log.Printf("cache get error (non-fatal): %v", err)
+		} else if cachedOrder != nil {
+			log.Printf("cache hit for order %s", id)
+			c.JSON(http.StatusOK, cachedOrder)
+			return
+		}
+	}
+
+	// Cache miss or no cache: query database
+	order, err := h.uc.GetOrder(ctx, id)
 	switch {
 	case errors.Is(err, usecase.ErrNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
 	case err != nil:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 	default:
+		// Cache the retrieved order
+		if h.cache != nil && order != nil {
+			if err := h.cache.Set(ctx, id, order); err != nil {
+				log.Printf("failed to cache order: %v", err)
+			}
+		}
 		c.JSON(http.StatusOK, order)
 	}
 }
 
 func (h *OrderHandler) CancelOrder(c *gin.Context) {
 	id := c.Param("id")
-	order, err := h.uc.CancelOrder(context.Background(), id)
+	ctx := context.Background()
+
+	order, err := h.uc.CancelOrder(ctx, id)
 	switch {
 	case errors.Is(err, usecase.ErrNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
@@ -100,6 +143,12 @@ func (h *OrderHandler) CancelOrder(c *gin.Context) {
 	case err != nil:
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 	default:
+		// Invalidate cache on status change
+		if h.cache != nil {
+			if err := h.cache.InvalidateOrder(ctx, id); err != nil {
+				log.Printf("failed to invalidate cache for order %s: %v", id, err)
+			}
+		}
 		c.JSON(http.StatusOK, order)
 	}
 }

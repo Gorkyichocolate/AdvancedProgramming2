@@ -12,7 +12,6 @@ import (
 )
 
 func main() {
-	// Подключаемся к Payment Service gRPC
 	conn, err := grpc.DialContext(
 		context.Background(),
 		"localhost:8088",
@@ -28,48 +27,23 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Test 1: Создаём несколько платежей с разными статусами
-	fmt.Println("=== Test 1: Creating payments ===")
-	paymentRequests := []*ap2v1.PaymentRequest{
-		{OrderId: "order-1", Amount: 1000},  // Authorized
-		{OrderId: "order-2", Amount: 60000}, // Declined
-		{OrderId: "order-3", Amount: 2000},  // Authorized
-	}
-
-	for _, req := range paymentRequests {
-		resp, err := client.ProcessPayment(ctx, req)
-		if err != nil {
-			log.Printf("Failed to process payment: %v", err)
-			continue
-		}
-		fmt.Printf("Order %s: Status=%s, TransactionID=%s\n", req.OrderId, resp.Status, resp.TransactionId)
-	}
-
-	// Test 2: Список платежей со статусом "Authorized"
-	fmt.Println("\n=== Test 2: ListPayments - Authorized ===")
-	listReq := &ap2v1.ListPaymentsRequest{Status: "Authorized"}
-	listResp, err := client.ListPayments(ctx, listReq)
+	fmt.Println("Authorized:")
+	r1 := &ap2v1.ListPaymentsRequest{Status: "Authorized"}
+	resp1, err := client.ListPayments(ctx, r1)
 	if err != nil {
-		log.Fatalf("Failed to list payments: %v", err)
+		log.Fatal(err)
+	}
+	for _, p := range resp1.Payments {
+		fmt.Println(p.TransactionId)
 	}
 
-	fmt.Printf("Found %d authorized payments:\n", len(listResp.Payments))
-	for i, p := range listResp.Payments {
-		fmt.Printf("  [%d] Status=%s, TransactionID=%s\n", i+1, p.Status, p.TransactionId)
-	}
-
-	// Test 3: Список платежей со статусом "Declined"
-	fmt.Println("\n=== Test 3: ListPayments - Declined ===")
-	listReq = &ap2v1.ListPaymentsRequest{Status: "Declined"}
-	listResp, err = client.ListPayments(ctx, listReq)
+	fmt.Println("\nDeclined:")
+	r2 := &ap2v1.ListPaymentsRequest{Status: "Declined"}
+	resp2, err := client.ListPayments(ctx, r2)
 	if err != nil {
-		log.Fatalf("Failed to list payments: %v", err)
+		log.Fatal(err)
 	}
-
-	fmt.Printf("Found %d declined payments:\n", len(listResp.Payments))
-	for i, p := range listResp.Payments {
-		fmt.Printf("  [%d] Status=%s, TransactionID=%s\n", i+1, p.Status, p.TransactionId)
+	for _, p := range resp2.Payments {
+		fmt.Println(p.TransactionId)
 	}
-
-	fmt.Println("\n✓ All tests completed!")
 }

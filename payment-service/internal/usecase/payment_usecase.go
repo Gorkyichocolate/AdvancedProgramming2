@@ -7,16 +7,21 @@ import (
 	"fmt"
 
 	"github.com/Gorkyichocolate/AdvancedProgramming2/payment-service/internal/domain"
+	"github.com/Gorkyichocolate/AdvancedProgramming2/payment-service/internal/events"
 )
 
 var ErrNotFound = errors.New("payment not found")
 
 type PaymentUsecase struct {
-	repo PaymentRepository
+	repo      PaymentRepository
+	publisher EventPublisher
 }
 
-func NewPaymentUsecase(repo PaymentRepository) *PaymentUsecase {
-	return &PaymentUsecase{repo: repo}
+func NewPaymentUsecase(repo PaymentRepository, publisher EventPublisher) *PaymentUsecase {
+	return &PaymentUsecase{
+		repo:      repo,
+		publisher: publisher,
+	}
 }
 
 func (u *PaymentUsecase) ProcessPayment(ctx context.Context, orderID string, amount int64) (*domain.Payment, error) {
@@ -36,6 +41,21 @@ func (u *PaymentUsecase) ProcessPayment(ctx context.Context, orderID string, amo
 	if err := u.repo.Create(ctx, p); err != nil {
 		return nil, err
 	}
+
+	if p.Status == domain.StatusAuthorized {
+		event := events.PaymentEvent{
+			OrderID:       p.OrderID,
+			Amount:        float64(p.Amount),
+			CustomerEmail: "test@example.com",
+			Status:        "completed",
+			MessageID:     newUUID(),
+		}
+
+		if err := u.publisher.PublishPaymentCompleted(ctx, event); err != nil {
+			return nil, err
+		}
+	}
+
 	return p, nil
 }
 

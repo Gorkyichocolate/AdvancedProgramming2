@@ -68,9 +68,9 @@ curl http://localhost:8087/payments/{order_id}
 
 ### ProcessPayment
 ```bash
-grpcurl -plaintext \
+~grpcurl -plaintext \
   -d '{"order_id":"{order_id}","amount":50000}' \
-  localhost:8088 ap2.v1.PaymentService/ProcessPayment
+  localhost:8088 ap2.v1.PaymentService/ProcessPayment~
 ```
 
 ### ListPayments

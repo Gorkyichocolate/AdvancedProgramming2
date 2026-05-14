@@ -322,3 +322,285 @@ graph TB
     style Docker_Container_2 fill:#F5A623
     style Persistence fill:#50E3C2
 ```
+
+---
+
+# 📊 Lectures 7-9: Redis Caching, Provider Adapter & Background Jobs
+
+## Architecture with Redis & Notification Service
+
+```mermaid
+graph TB
+    Client["🖥️ Client"]
+    
+    subgraph OrderService ["Order Service"]
+        OrderHandler["Handler<br/>GET /orders/:id"]
+        OrderCache["Cache Layer<br/>Redis"]
+        OrderDB["PostgreSQL<br/>orders table"]
+    end
+    
+    subgraph PaymentService ["Payment Service"]
+        PaymentAPI["REST API<br/>POST /payments"]
+        PaymentDB["PostgreSQL<br/>payments table"]
+        RabbitMQ["RabbitMQ<br/>payment.completed"]
+    end
+    
+    subgraph NotificationService ["Notification Service"]
+        Consumer["Message Consumer<br/>RabbitMQ"]
+        JobProcessor["Job Processor<br/>Retry + Backoff"]
+        Provider["Provider Interface"]
+        Redis["Redis<br/>Job Status"]
+        Simulated["Simulated Provider<br/>Latency + Failures"]
+        SMTP["SMTP Provider<br/>Real Email"]
+    end
+    
+    Client -->|GET /orders/:id| OrderHandler
+    OrderHandler -->|Check Cache| OrderCache
+    OrderCache -->|Miss| OrderDB
+    OrderDB -->|Data| OrderCache
+    OrderCache -->|Hit| OrderHandler
+    OrderHandler -->|Response| Client
+    
+    Client -->|POST /payments| PaymentAPI
+    PaymentAPI -->|Save| PaymentDB
+    PaymentAPI -->|Publish Event| RabbitMQ
+    
+    RabbitMQ -->|Consume| Consumer
+    Consumer -->|Process Job| JobProcessor
+    JobProcessor -->|Check Status| Redis
+    JobProcessor -->|Send via| Provider
+    Provider -->|Use| Simulated
+    Provider -->|Use| SMTP
+    JobProcessor -->|Update Status| Redis
+    
+    Simulated -->|Simulate| Email["📧 Email<br/>Simulated"]
+    SMTP -->|Send| Email
+    
+    style OrderService fill:#7ED321
+    style PaymentService fill:#F5A623
+    style NotificationService fill:#FF6B6B
+    style OrderCache fill:#50E3C2
+    style Redis fill:#50E3C2
+```
+
+---
+
+## Cache-Aside Pattern: GET Order
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Handler
+    participant Cache as Redis Cache
+    participant DB as PostgreSQL
+    
+    Client->>Handler: GET /orders/123
+    Handler->>Cache: Get order:123
+    
+    alt Cache Hit
+        Cache-->>Handler: Order data
+        Handler-->>Client: 200 OK (cached)
+    else Cache Miss
+        Cache-->>Handler: nil
+        Handler->>DB: SELECT * FROM orders WHERE id=123
+        DB-->>Handler: Order data
+        Handler->>Cache: SET order:123 + TTL(300s)
+        Handler-->>Client: 200 OK (from DB)
+    end
+```
+
+---
+
+## Cache Invalidation on Status Change
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Handler
+    participant UseCase
+    participant DB as PostgreSQL
+    participant Cache as Redis
+    
+    Client->>Handler: PATCH /orders/123/cancel
+    Handler->>UseCase: CancelOrder(123)
+    UseCase->>DB: UPDATE orders SET status='cancelled'
+    DB-->>UseCase: OK
+    UseCase-->>Handler: Updated order
+    Handler->>Cache: DEL order:123
+    Cache-->>Handler: OK
+    Handler-->>Client: 200 OK
+```
+
+---
+
+## Background Job Processing with Retry & Idempotency
+
+```mermaid
+sequenceDiagram
+    participant RabbitMQ
+    participant Consumer
+    participant JobProcessor
+    participant Redis as Redis<br/>Job Status
+    participant Provider
+    participant Email
+    
+    RabbitMQ->>Consumer: Consume payment.completed
+    Consumer->>Consumer: Parse PaymentEvent
+    Consumer->>JobProcessor: ProcessJob(job)
+    
+    JobProcessor->>Redis: GET job:notification:{payment_id}
+    
+    alt Idempotent: Already Processed
+        Redis-->>JobProcessor: {"status":"success"}
+        JobProcessor-->>Consumer: nil (skip)
+        Consumer->>RabbitMQ: ACK message
+    else New Job
+        Redis-->>JobProcessor: nil
+        JobProcessor->>Provider: SendNotification()
+        
+        alt Success
+            Provider->>Email: Send email
+            Email-->>Provider: OK
+            Provider-->>JobProcessor: nil
+            JobProcessor->>Redis: SET status=success, TTL=24h
+            JobProcessor-->>Consumer: nil
+            Consumer->>RabbitMQ: ACK message
+        else Failure
+            Provider-->>JobProcessor: error
+            JobProcessor->>Redis: SET status=pending,<br/>NextRetry=now+backoff
+            JobProcessor-->>Consumer: error
+            Consumer->>RabbitMQ: NACK message (requeue)
+            Note over RabbitMQ: Message back to queue<br/>for retry with backoff
+        end
+    end
+```
+
+---
+
+## Exponential Backoff Timeline
+
+```
+Attempt 1 (Time: 0s)
+    │ FAIL
+    ├─ Backoff: 2000ms * 2^0 = 2s
+    └─ NextRetry: now + 2s
+          │
+          └──────────────────────▶ Wait 2 seconds
+
+Attempt 2 (Time: +2s)
+    │ FAIL
+    ├─ Backoff: 2000ms * 2^1 = 4s
+    └─ NextRetry: now + 4s
+          │
+          └──────────────────────────────────▶ Wait 4 seconds
+
+Attempt 3 (Time: +6s)
+    │ FAIL
+    ├─ Backoff: 2000ms * 2^2 = 8s
+    └─ NextRetry: now + 8s
+          │
+          └──────────────────────────────────────────────────▶ Wait 8 seconds
+
+Attempt 4 (Time: +14s)
+    │ SUCCESS ✓
+    └─ Job completed, stop retrying
+```
+
+---
+
+## Provider Adapter Pattern
+
+```mermaid
+graph TB
+    App["Notification Service<br/>Job Processor"]
+    
+    Interface["NotificationProvider<br/>Interface<br/><br/>SendNotification()"]
+    
+    SimulatedImpl["SimulatedProvider<br/>• Configurable latency<br/>• Random failures<br/>• Log output<br/>• For testing"]
+    
+    SMTPImpl["SMTPProvider<br/>• Real SMTP server<br/>• Actual emails<br/>• Production ready<br/>• Error handling"]
+    
+    Factory["Provider Factory<br/>PROVIDER_MODE env<br/>→ Create implementation"]
+    
+    App -->|Depends on| Interface
+    Interface ---|implements| SimulatedImpl
+    Interface ---|implements| SMTPImpl
+    Factory -->|Creates| SimulatedImpl
+    Factory -->|Creates| SMTPImpl
+    App -->|Calls| Factory
+    
+    style Interface fill:#FFD700
+    style SimulatedImpl fill:#87CEEB
+    style SMTPImpl fill:#90EE90
+    style Factory fill:#FFB6C1
+```
+
+---
+
+## Data Storage: Redis Key Patterns
+
+```
+Job Status (Idempotency):
+┌─────────────────────────────────────────┐
+│ Key: job:notification:{payment_id}      │
+│ TTL: 24h (success), 7d (failed)         │
+│                                          │
+│ Value:                                   │
+│ {                                        │
+│   "status": "success|pending|failed",   │
+│   "attempt_count": 1,                    │
+│   "last_attempt": "2024-05-14T...",      │
+│   "next_retry": "2024-05-14T...",        │
+│   "error": "simulated error"             │
+│ }                                        │
+└─────────────────────────────────────────┘
+
+Order Cache (Cache-Aside):
+┌─────────────────────────────────────────┐
+│ Key: order:{order_id}                   │
+│ TTL: 300s (configurable)                │
+│                                          │
+│ Value:                                   │
+│ {                                        │
+│   "id": "order-123",                     │
+│   "customer_id": "cust-456",             │
+│   "item_name": "Widget",                 │
+│   "amount": 1000,                        │
+│   "status": "PENDING|PAID|CANCELLED"     │
+│ }                                        │
+└─────────────────────────────────────────┘
+```
+
+---
+
+## Component Interactions Summary
+
+| Feature | Component | Lecture | Pattern |
+|---------|-----------|---------|---------|
+| Order caching | Redis + Order Service | 7 | Cache-aside |
+| Cache invalidation | Handler + Redis | 7 | Atomic updates |
+| Notification provider | NotificationProvider interface | 8 | Adapter |
+| Provider selection | Factory + Env config | 8 | Factory |
+| Job processing | JobProcessor + RabbitMQ | 8-9 | Background worker |
+| Idempotency | Redis job status | 8-9 | Idempotency record |
+| Retry logic | JobProcessor | 8-9 | Retry pattern |
+| Exponential backoff | JobProcessor | 8-9 | Backoff strategy |
+
+---
+
+## Configuration Layer
+
+```yaml
+Environment Variables:
+├── REDIS_URL: redis://localhost:6379
+├── CACHE_TTL_SECONDS: 300
+├── PROVIDER_MODE: SIMULATED|REAL
+├── SIMULATED_FAILURE_RATE: 0.2
+├── SIMULATED_LATENCY_MS: 500
+├── PROVIDER_RETRY_MAX_ATTEMPTS: 5
+├── PROVIDER_RETRY_INITIAL_BACKOFF_MS: 2000
+├── PROVIDER_RETRY_MAX_BACKOFF_MS: 32000
+└── SMTP_*: For REAL provider mode
+```
+
+All behavior controlled by environment variables - no code changes needed!

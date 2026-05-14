@@ -2,18 +2,17 @@ package main
 
 import (
 	"context"
-	"github.com/Gorkyichocolate/AdvancedProgramming2/payment-service/internal/app"
 	"log"
 	"os"
 
+	"github.com/Gorkyichocolate/AdvancedProgramming2/payment-service/internal/app"
+	"github.com/Gorkyichocolate/AdvancedProgramming2/payment-service/internal/messaging"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
 
 func main() {
-	if err := godotenv.Load(".env"); err != nil {
-		log.Println("no .env file, reading from environment")
-	}
+	_ = godotenv.Load(".env")
 
 	dbURL := os.Getenv("PAYMENT_DB_URL")
 	if dbURL == "" {
@@ -31,17 +30,29 @@ func main() {
 	}
 	log.Println("payment-service: connected to DB")
 
-	addr := os.Getenv("PAYMENT_ADDR")
-	if addr == "" {
-		addr = ":8087"
+	httpAddr := getEnv("PAYMENT_ADDR", ":8089")
+	grpcAddr := getEnv("PAYMENT_GRPC_ADDR", ":8088")
+
+	rabbitURL := getEnv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
+	queue := getEnv("RABBITMQ_QUEUE", "payment.completed")
+
+	publisher, err := messaging.NewRabbitMQPublisher(rabbitURL, queue)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	grpcAddr := os.Getenv("PAYMENT_GRPC_ADDR")
-	if grpcAddr == "" {
-		grpcAddr = ":8088"
-	}
+	log.Println("HTTP running on", httpAddr)
+	log.Println("gRPC running on", grpcAddr)
 
-	if err := app.New(db).Run(addr, grpcAddr); err != nil {
+	if err := app.New(db, publisher).Run(httpAddr, grpcAddr); err != nil {
 		log.Fatalf("payment-service exited: %v", err)
 	}
+}
+
+func getEnv(key, fallback string) string {
+	val := os.Getenv(key)
+	if val == "" {
+		return fallback
+	}
+	return val
 }
