@@ -3,7 +3,7 @@ module github.com/Gorkyichocolate/AdvancedProgramming2
 go 1.25.7
 
 require (
-	github.com/Gorkyichocolate/ap2-generated v0.0.0-20260416142250-695336f9f565
+	github.com/Gorkyichocolate/ap2-generated v0.0.0-20260419180747-3296885dd409
 	github.com/gin-gonic/gin v1.12.0
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/joho/godotenv v1.5.1
@@ -50,5 +50,3 @@ require (
 	golang.org/x/text v0.36.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478 // indirect
 )
-
-replace github.com/Gorkyichocolate/ap2-generated => ../ap2-generated

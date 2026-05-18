@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/Gorkyichocolate/AdvancedProgramming2/notification-service/internal/notification"
 
@@ -39,13 +40,19 @@ func main() {
 	smtpUser := getEnv("SMTP_USER", "")
 	smtpPassword := getEnv("SMTP_PASSWORD", "")
 	smtpFrom := getEnv("SMTP_FROM", "noreply@ap2.dev")
-	simulatedFailureRate := getEnvFloat64("SIMULATED_FAILURE_RATE", 0.2)
 	simulatedLatencyMs := getEnvInt("SIMULATED_LATENCY_MS", 500)
 
 	// Retry configuration
 	maxRetries := getEnvInt("PROVIDER_RETRY_MAX_ATTEMPTS", 5)
 	initialBackoffMs := getEnvInt("PROVIDER_RETRY_INITIAL_BACKOFF_MS", 2000)
 	maxBackoffMs := getEnvInt("PROVIDER_RETRY_MAX_BACKOFF_MS", 32000)
+
+	// Worker pool configuration
+	numWorkers := getEnvInt("NUM_WORKERS", 5)
+
+	// Success rate 20% = failure rate 80%
+	successRate := getEnvFloat64("SUCCESS_RATE", 0.2)
+	failureRate := 1.0 - successRate
 
 	// Create notification provider based on mode
 	config := &notification.NotificationConfig{
@@ -55,7 +62,7 @@ func main() {
 		SMTPUser:              smtpUser,
 		SMTPPassword:          smtpPassword,
 		SMTPFrom:              smtpFrom,
-		SimulatedFailureRate:  simulatedFailureRate,
+		SimulatedFailureRate:  failureRate,
 		SimulatedLatencyMs:    simulatedLatencyMs,
 		RetryMaxAttempts:      maxRetries,
 		RetryInitialBackoffMs: initialBackoffMs,
@@ -124,6 +131,60 @@ func main() {
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 
 	log.Println("Notification Service started, waiting for messages...")
+	log.Printf("Worker pool size: %d workers", numWorkers)
+	log.Printf("Success rate: %.0f%%, Max retries: %d", successRate*100, maxRetries)
+
+	// Create job channel and start workers
+	type JobMessage struct {
+		event  PaymentEvent
+		rawMsg amqp.Delivery
+	}
+
+	jobQueue := make(chan JobMessage, numWorkers*2)
+
+	// Start worker goroutines
+	for w := 1; w <= numWorkers; w++ {
+		go func(workerID int) {
+			for jobMsg := range jobQueue {
+				processingStart := time.Now()
+
+				// Create notification job
+				job := &notification.NotificationJob{
+					PaymentID:      jobMsg.event.OrderID,
+					RecipientEmail: jobMsg.event.CustomerEmail,
+					Subject:        "Payment Confirmation",
+					Body:           buildEmailBody(jobMsg.event),
+				}
+
+				// Process the job (with retry logic and idempotency)
+				ctx := context.Background()
+				err := jobProcessor.ProcessJob(ctx, job)
+				duration := time.Since(processingStart)
+
+				if err != nil {
+					log.Printf("[WORKER-%d] Job processing failed for payment %s in %v: %v. Will retry later.",
+						workerID, jobMsg.event.OrderID, duration, err)
+					// Nack and requeue for later retry
+					if err.Error() == "max retries exceeded" {
+						log.Printf("[WORKER-%d] Dropping poison job: %s",
+							workerID, jobMsg.event.OrderID)
+
+						// reject without requeue -> goes to DLQ
+						jobMsg.rawMsg.Nack(false, false)
+					} else {
+						// temporary error -> retry later
+						jobMsg.rawMsg.Nack(false, true)
+					}
+					continue
+				}
+
+				// Acknowledge successful processing
+				jobMsg.rawMsg.Ack(false)
+				log.Printf("[WORKER-%d] ✓ Message processed successfully: payment_id=%s (took %v)",
+					workerID, jobMsg.event.OrderID, duration)
+			}
+		}(w)
+	}
 
 	go func() {
 		for msg := range msgs {
@@ -136,27 +197,11 @@ func main() {
 				continue
 			}
 
-			// Create notification job
-			job := &notification.NotificationJob{
-				PaymentID:      event.OrderID,
-				RecipientEmail: event.CustomerEmail,
-				Subject:        "Payment Confirmation",
-				Body:           buildEmailBody(event),
+			// Send to job queue for parallel processing
+			jobQueue <- JobMessage{
+				event:  event,
+				rawMsg: msg,
 			}
-
-			// Process the job (with retry logic and idempotency)
-			ctx := context.Background()
-			err = jobProcessor.ProcessJob(ctx, job)
-			if err != nil {
-				log.Printf("Job processing failed for payment %s: %v. Will retry later.", event.OrderID, err)
-				// Nack and requeue for later retry
-				msg.Nack(false, true)
-				continue
-			}
-
-			// Acknowledge successful processing
-			msg.Ack(false)
-			log.Printf("Message processed successfully: payment_id=%s", event.OrderID)
 		}
 	}()
 

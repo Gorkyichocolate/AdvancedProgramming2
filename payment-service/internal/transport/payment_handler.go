@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"context"
 	"errors"
 	"net/http"
 
@@ -30,7 +29,7 @@ func (h *PaymentHandler) ProcessPayment(c *gin.Context) {
 		return
 	}
 
-	p, err := h.uc.ProcessPayment(context.Background(), req.OrderID, req.Amount)
+	p, err := h.uc.ProcessPayment(c.Request.Context(), req.OrderID, req.Amount)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to process payment"})
 		return
@@ -41,7 +40,7 @@ func (h *PaymentHandler) ProcessPayment(c *gin.Context) {
 
 func (h *PaymentHandler) GetPayment(c *gin.Context) {
 	orderID := c.Param("id")
-	p, err := h.uc.GetPayment(context.Background(), orderID)
+	p, err := h.uc.GetPayment(c.Request.Context(), orderID)
 	switch {
 	case errors.Is(err, usecase.ErrNotFound):
 		c.JSON(http.StatusNotFound, gin.H{"error": "payment not found"})

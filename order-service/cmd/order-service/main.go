@@ -18,7 +18,7 @@ func main() {
 	}
 
 	// Try DATABASE_URL first, then fall back to ORDER_DB_URL
-	dbURL := os.Getenv("DATABASE_URL")
+	dbURL := os.Getenv("ORDER_DB_URL")
 	if dbURL == "" {
 		dbURL = os.Getenv("ORDER_DB_URL")
 	}

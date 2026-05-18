@@ -2,6 +2,7 @@ package transport
 
 import (
 	"context"
+	"time"
 
 	"github.com/Gorkyichocolate/AdvancedProgramming2/order-service/internal/usecase"
 
@@ -16,7 +17,11 @@ type PaymentGRPCClient struct {
 }
 
 func NewPaymentGRPCClient(ctx context.Context, addr string) (*PaymentGRPCClient, error) {
-	conn, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	// Create a context with timeout for connection establishment
+	dialCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	conn, err := grpc.DialContext(dialCtx, addr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	if err != nil {
 		return nil, err
 	}
@@ -28,7 +33,11 @@ func NewPaymentGRPCClient(ctx context.Context, addr string) (*PaymentGRPCClient,
 }
 
 func (p *PaymentGRPCClient) Pay(ctx context.Context, orderID string, amount int64) (*usecase.PaymentResult, error) {
-	resp, err := p.client.ProcessPayment(ctx, &ap2v1.PaymentRequest{
+	// Ensure payment call has a timeout (max 10 seconds)
+	payCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	resp, err := p.client.ProcessPayment(payCtx, &ap2v1.PaymentRequest{
 		OrderId: orderID,
 		Amount:  amount,
 	})

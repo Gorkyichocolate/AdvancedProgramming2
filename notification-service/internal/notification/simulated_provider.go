@@ -7,13 +7,11 @@ import (
 	"time"
 )
 
-// SimulatedNotificationProvider simulates sending notifications with configurable latency and failures
 type SimulatedNotificationProvider struct {
-	failureRate float64 // 0.0 to 1.0
-	latencyMs   int     // milliseconds
+	failureRate float64
+	latencyMs   int
 }
 
-// NewSimulatedNotificationProvider creates a new simulated provider
 func NewSimulatedNotificationProvider(failureRate float64, latencyMs int) *SimulatedNotificationProvider {
 	if failureRate < 0 {
 		failureRate = 0
@@ -31,28 +29,30 @@ func NewSimulatedNotificationProvider(failureRate float64, latencyMs int) *Simul
 	}
 }
 
-// SendNotification simulates sending a notification with latency and possible failure
 func (sp *SimulatedNotificationProvider) SendNotification(recipientEmail string, subject string, body string) error {
-	// Simulate network latency
+	startTime := time.Now()
+
 	if sp.latencyMs > 0 {
-		log.Printf("[SIMULATED] Simulating network latency: %dms", sp.latencyMs)
+		log.Printf("[SIMULATED] [%s] Simulating network latency: %dms",
+			time.Now().Format("15:04:05.000"), sp.latencyMs)
 		time.Sleep(time.Duration(sp.latencyMs) * time.Millisecond)
 	}
 
-	// Simulate random failure
 	if sp.failureRate > 0 {
 		randomValue := rand.Float64()
 		if randomValue < sp.failureRate {
-			err := fmt.Errorf("simulated provider error: random failure (probability: %.2f%%)", sp.failureRate*100)
-			log.Printf("[SIMULATED] %v", err)
+			duration := time.Since(startTime)
+			err := fmt.Errorf("simulated provider error: random failure (probability: %.0f%%) after %v",
+				sp.failureRate*100, duration)
+			log.Printf("[SIMULATED] [%s] ✗ %v to %s",
+				time.Now().Format("15:04:05.000"), err, recipientEmail)
 			return err
 		}
 	}
 
-	// Log the "sent" notification
-	log.Printf("[SIMULATED] Notification sent to: %s", recipientEmail)
-	log.Printf("[SIMULATED] Subject: %s", subject)
-	log.Printf("[SIMULATED] Body: %s", body)
+	duration := time.Since(startTime)
+	log.Printf("[SIMULATED] [%s] ✓ Notification sent to: %s (in %v)",
+		time.Now().Format("15:04:05.000"), recipientEmail, duration)
 
 	return nil
 }

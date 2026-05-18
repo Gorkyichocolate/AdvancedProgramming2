@@ -1,7 +1,6 @@
 package transport
 
 import (
-	"context"
 	"errors"
 	"log"
 	"net/http"
@@ -57,7 +56,7 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		return
 	}
 
-	order, err := h.uc.CreateOrder(context.Background(), req.CustomerID, req.ItemName, req.Amount)
+	order, err := h.uc.CreateOrder(c.Request.Context(), req.CustomerID, req.ItemName, req.Amount)
 
 	var (
 		status int
@@ -72,19 +71,20 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		body = gin.H{"error": "payment service unavailable", "order": order}
 		// Cache the order even if payment service is unavailable
 		if h.cache != nil && order != nil {
-			if err := h.cache.Set(context.Background(), order.ID, order); err != nil {
+			if err := h.cache.Set(c.Request.Context(), order.ID, order); err != nil {
 				log.Printf("failed to cache order: %v", err)
 			}
 		}
 	case err != nil:
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		log.Printf("create order error: %+v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	default:
 		status = http.StatusCreated
 		body = order
 		// Cache newly created orders
 		if h.cache != nil && order != nil {
-			if err := h.cache.Set(context.Background(), order.ID, order); err != nil {
+			if err := h.cache.Set(c.Request.Context(), order.ID, order); err != nil {
 				log.Printf("failed to cache order: %v", err)
 			}
 		}
@@ -98,7 +98,7 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 
 func (h *OrderHandler) GetOrder(c *gin.Context) {
 	id := c.Param("id")
-	ctx := context.Background()
+	ctx := c.Request.Context()
 
 	// Cache-aside pattern: check cache first
 	if h.cache != nil {
@@ -132,7 +132,7 @@ func (h *OrderHandler) GetOrder(c *gin.Context) {
 
 func (h *OrderHandler) CancelOrder(c *gin.Context) {
 	id := c.Param("id")
-	ctx := context.Background()
+	ctx := c.Request.Context()
 
 	order, err := h.uc.CancelOrder(ctx, id)
 	switch {
@@ -181,7 +181,7 @@ func (h *OrderHandler) GetList(c *gin.Context) {
 		return
 	}
 
-	orders, err := h.uc.OrderList(context.Background(), minAmount, maxAmount)
+	orders, err := h.uc.OrderList(c.Request.Context(), minAmount, maxAmount)
 	switch {
 	case errors.Is(err, usecase.ErrInvalidAmountRange):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

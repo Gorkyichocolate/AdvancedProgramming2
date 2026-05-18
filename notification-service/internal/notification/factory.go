@@ -5,17 +5,14 @@ import (
 	"strings"
 )
 
-// ProviderFactory creates notification providers based on configuration
 type ProviderFactory struct {
 	config *NotificationConfig
 }
 
-// NewProviderFactory creates a new provider factory
 func NewProviderFactory(config *NotificationConfig) *ProviderFactory {
 	return &ProviderFactory{config: config}
 }
 
-// CreateProvider creates a notification provider based on the configured mode
 func (pf *ProviderFactory) CreateProvider() (NotificationProvider, error) {
 	mode := strings.ToLower(strings.TrimSpace(pf.config.Mode))
 
@@ -27,7 +24,7 @@ func (pf *ProviderFactory) CreateProvider() (NotificationProvider, error) {
 			return nil, fmt.Errorf("SMTP_HOST is required for real provider mode")
 		}
 		if pf.config.SMTPPort == 0 {
-			pf.config.SMTPPort = 587 // Default SMTP port
+			pf.config.SMTPPort = 587
 		}
 		if pf.config.SMTPFrom == "" {
 			return nil, fmt.Errorf("SMTP_FROM is required for real provider mode")
